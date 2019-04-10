@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	app := &oddeven.OddEvenApplication{}
+	app := oddeven.NewOddEvenApplication()
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 
 	// Start the listener

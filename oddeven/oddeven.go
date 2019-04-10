@@ -15,14 +15,19 @@ const (
 )
 
 type state struct {
-	size    int64
-	height  int64
-	appHash []byte
+	size         int64
+	height       int64
+	appHash      []byte
+	frequencyMap map[int]int
 }
 
 type OddEvenApplication struct {
 	types.BaseApplication
 	state state
+}
+
+func NewOddEvenApplication() *OddEvenApplication {
+	return &OddEvenApplication{state: state{frequencyMap: make(map[int]int)}}
 }
 
 func (app *OddEvenApplication) Info(req types.RequestInfo) types.ResponseInfo {
@@ -47,6 +52,7 @@ func (app *OddEvenApplication) DeliverTx(tx []byte) types.ResponseDeliverTx {
 	}
 
 	app.state.size++
+	app.state.frequencyMap[txValue]++
 	return types.ResponseDeliverTx{Code: codeTypeOK}
 }
 
@@ -77,7 +83,20 @@ func (app *OddEvenApplication) Commit() (resp types.ResponseCommit) {
 }
 
 func (app *OddEvenApplication) Query(reqQuery types.RequestQuery) types.ResponseQuery {
-	return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.size))}
+	switch reqQuery.Path {
+	case "hash":
+		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.height))}
+	case "tx":
+		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.size))}
+	case "freq":
+		value, err := parseValue(reqQuery.Data)
+		if err != nil {
+			return types.ResponseQuery{Log: fmt.Sprintf("%v", err)}
+		}
+		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.frequencyMap[value]))}
+	default:
+		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash, tx or freq, got %v", reqQuery.Path)}
+	}
 }
 
 func parseValue(tx []byte) (int, error) {
