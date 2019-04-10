@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tendermint-exp/oddeven"
+	"github.com/ArtosSystems/tendermint-exp/oddeven"
 	"github.com/tendermint/tendermint/abci/server"
 	cmn "github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
