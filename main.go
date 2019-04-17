@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/ArtosSystems/tendermint-exp/oddeven"
+	"github.com/ArtosSystems/tendermint-exp/ticketstore"
 	"github.com/tendermint/tendermint/abci/server"
 	cmn "github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	app := oddeven.NewOddEvenApplication()
+	app := ticketstore.NewTicketStoreApplication()
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 
 	// Start the listener
