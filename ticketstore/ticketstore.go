@@ -30,6 +30,11 @@ type ticketError struct{ msg string }
 
 func (err ticketError) Error() string { return err.msg }
 
+type TicketStoreApplication struct {
+	types.BaseApplication
+	state state
+}
+
 type state struct {
 	size         int64
 	height       int64
@@ -47,14 +52,9 @@ type TicketTx struct {
 	PrevOwnerProof  string  `json:"prevOwnerProof"`
 }
 
-type TicketReposnse struct {
+type ticketResponse struct {
 	Ticket ticket `json:"ticket"`
 	MerkleProof []string `json:"merkleProof"`
-}
-
-type TicketStoreApplication struct {
-	types.BaseApplication
-	state state
 }
 
 type ticket struct {
@@ -143,15 +143,15 @@ func (app *TicketStoreApplication) Commit() (resp types.ResponseCommit) {
 func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.ResponseQuery {
 	switch reqQuery.Path {
 	case "hash":
-		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.height))}
+		return types.ResponseQuery{Value: []byte(fmt.Sprint(app.state.height))}
 	case "tx":
-		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.size))}
+		return types.ResponseQuery{Value: []byte(fmt.Sprint(app.state.size))}
 	case "ticket":
-		ticket, merkleProof, err := app.state.findTicketAtHeight(string(reqQuery.Data))
+		ticket, merkleProof, err := app.state.findTicket(string(reqQuery.Data))
 		if err != nil {
 			return types.ResponseQuery{Log: fmt.Sprintf("%v is not a valid ticket id", reqQuery.Data)}
 		}
-		response, _ := json.Marshal(TicketReposnse{ticket, merkleProof})
+		response, _ := json.Marshal(ticketResponse{ticket, merkleProof})
 		return types.ResponseQuery{Value: response}
 	default:
 		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash or tx, got %v", reqQuery.Path)}
@@ -219,7 +219,7 @@ func (ticket TicketTx) getOwnerProofSigner(prevTicketHash []byte) (string, error
 	return strings.ToLower(crypto.PubkeyToAddress(*signerPkey).Hex()), nil
 }
 
-func (state state) findTicketAtHeight(queryData string) (ticket, []string, error) {
+func (state state) findTicket(queryData string) (ticket, []string, error) {
 	ticketId, height, err := parseTicketQuery(queryData, state.height)
 	if err != nil {
 		return ticket{}, nil, err
