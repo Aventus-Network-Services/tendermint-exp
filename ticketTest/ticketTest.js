@@ -2,7 +2,7 @@ const axios = require('axios')
 const Base64 = require('js-base64').Base64
 const EthCrypto = require('eth-crypto')
 const utils = require('web3-utils')
-const node = 'http://localhost:26657/'
+const node = 'http://0.0.0.0:26657/'
 const sell = process.argv[2]
 
 const addr1 = '0x91ea89ded135e9eea4386ae8f2a8a525afa05f7f'

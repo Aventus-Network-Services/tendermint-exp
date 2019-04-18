@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	sha3 "github.com/miguelmota/go-solidity-sha3"
 	"github.com/tendermint/tendermint/abci/types"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -24,6 +23,7 @@ var (
 	ErrBadAddress = &ticketError{"Ticket must have an address"}
 	ErrBadNonce   = &ticketError{"Ticket nonce must increase on resale"}
 	ErrBadSignature = &ticketError{"Resale must be signed by the previous owner"}
+	ErrTicketNotFound = &ticketError{"Ticket could not be found"}
 )
 
 type ticketError struct{ msg string }
@@ -34,11 +34,12 @@ type state struct {
 	size         int64
 	height       int64
 	rootHash     []byte
-	tickets      map[uint64]Ticket
+	tickets      map[uint64]ticket
+	history      map[int64]snapshot
 	tempTreeContent  []merkletree.Content
 }
 
-type Ticket struct {
+type TicketTx struct {
 	Id            	uint64  `json:"id"`
 	Nonce           uint64  `json:"nonce"`
 	Details       	string  `json:"details"`
@@ -46,13 +47,28 @@ type Ticket struct {
 	PrevOwnerProof  string  `json:"prevOwnerProof"`
 }
 
+type TicketReposnse struct {
+	Ticket ticket `json:"ticket"`
+	MerkleProof []string `json:"merkleProof"`
+}
+
 type TicketStoreApplication struct {
 	types.BaseApplication
 	state state
 }
 
+type ticket struct {
+	TicketTx `json:"ticketTx"`
+	ChangeHeights []int64 `json:"changeHeights"`
+}
+
+type snapshot struct {
+	tickets map[uint64]ticket
+	tree merkletree.MerkleTree
+}
+
 func NewTicketStoreApplication() *TicketStoreApplication {
-	return &TicketStoreApplication{state: state{tickets: make(map[uint64]Ticket)}}
+	return &TicketStoreApplication{state: state{tickets: make(map[uint64]ticket), history: make(map[int64]snapshot)}}
 }
 
 func (app *TicketStoreApplication) Info(req types.RequestInfo) types.ResponseInfo {
@@ -63,8 +79,8 @@ func (app *TicketStoreApplication) Info(req types.RequestInfo) types.ResponseInf
 }
 
 func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx {
-	var ticket Ticket
-	err := json.Unmarshal(tx, &ticket)
+	var ticketTx TicketTx
+	err := json.Unmarshal(tx, &ticketTx)
 
 	if err != nil {
 		return types.ResponseDeliverTx{
@@ -72,8 +88,8 @@ func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx 
 			Log: fmt.Sprint(err) }
 	}
 
-	previousTicket := app.state.tickets[ticket.Id]
-	err = ticket.validate(previousTicket)
+	previousTicket := app.state.tickets[ticketTx.Id]
+	err = ticketTx.validate(previousTicket.TicketTx)
 	if err != nil {
 		return types.ResponseDeliverTx{
 			Code: codeTypeTicketError,
@@ -81,14 +97,15 @@ func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx 
 	}
 
 	app.state.size++
-	app.state.tickets[ticket.Id] = ticket
-	app.state.tempTreeContent = append(app.state.tempTreeContent, ticket)
+	changeHeights := append(previousTicket.ChangeHeights, app.state.height + 1)
+	app.state.tickets[ticketTx.Id] = ticket{ticketTx, changeHeights}
+	app.state.tempTreeContent = append(app.state.tempTreeContent, ticketTx)
 	return types.ResponseDeliverTx{Code: codeTypeOK}
 }
 
 func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
-	var ticket Ticket
-	err := json.Unmarshal(tx, &ticket)
+	var ticketTx TicketTx
+	err := json.Unmarshal(tx, &ticketTx)
 
 	if err != nil {
 		return types.ResponseCheckTx{
@@ -96,8 +113,8 @@ func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
 			Log: fmt.Sprint(err) }
 	}
 
-	previousTicket := app.state.tickets[ticket.Id]
-	err = ticket.validate(previousTicket)
+	previousTicket := app.state.tickets[ticketTx.Id]
+	err = ticketTx.validate(previousTicket.TicketTx)
 	if err != nil {
 		return types.ResponseCheckTx{
 			Code: codeTypeTicketError,
@@ -109,10 +126,14 @@ func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
 
 func (app *TicketStoreApplication) Commit() (resp types.ResponseCommit) {
 	app.state.height++
-
 	if len(app.state.tempTreeContent) > 0 {
 		tree, _ := merkletree.NewTree(app.state.tempTreeContent)
 		app.state.rootHash = tree.Root.Hash
+		ticketsSnapshot := make(map[uint64]ticket)
+		for key, value := range app.state.tickets {
+			ticketsSnapshot[key] = value
+		}
+		app.state.history[app.state.height] = snapshot{ticketsSnapshot, *tree}
 		app.state.tempTreeContent = app.state.tempTreeContent[:0]
 	}
 
@@ -126,17 +147,18 @@ func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.Resp
 	case "tx":
 		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.size))}
 	case "ticket":
-		id, err := strconv.ParseUint(string(reqQuery.Data), 10, 64)
+		ticket, merkleProof, err := app.state.findTicketAtHeight(string(reqQuery.Data))
 		if err != nil {
 			return types.ResponseQuery{Log: fmt.Sprintf("%v is not a valid ticket id", reqQuery.Data)}
 		}
-		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.state.tickets[id]))}
+		response, _ := json.Marshal(TicketReposnse{ticket, merkleProof})
+		return types.ResponseQuery{Value: response}
 	default:
 		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash or tx, got %v", reqQuery.Path)}
 	}
 }
 
-func (ticket Ticket) CalculateHash() ([]byte, error) {
+func (ticket TicketTx) CalculateHash() ([]byte, error) {
 	idBytes := make([]byte,8)
 	binary.LittleEndian.PutUint64(idBytes, ticket.Id)
 	hash := sha3.SoliditySHA3(
@@ -145,8 +167,8 @@ func (ticket Ticket) CalculateHash() ([]byte, error) {
 	return hash, nil
 }
 
-func (ticket Ticket) Equals(other merkletree.Content) (bool, error) {
-	otherTicket, isTicket := other.(Ticket)
+func (ticket TicketTx) Equals(other merkletree.Content) (bool, error) {
+	otherTicket, isTicket := other.(TicketTx)
 	if isTicket {
 		return ticket == otherTicket, nil
 	}
@@ -155,7 +177,7 @@ func (ticket Ticket) Equals(other merkletree.Content) (bool, error) {
 }
 
 
-func (ticket Ticket) validate(prevTicket Ticket) error {
+func (ticket TicketTx) validate(prevTicket TicketTx) error {
 	if ticket.OwnerAddr == "" {
 		return ErrBadAddress
 	}
@@ -174,7 +196,6 @@ func (ticket Ticket) validate(prevTicket Ticket) error {
 		if err != nil {
 			return err
 		}
-		log.Print(signer, prevTicket.OwnerAddr)
 		if signer != strings.ToLower(prevTicket.OwnerAddr) {
 			return ErrBadSignature
 		}
@@ -183,7 +204,7 @@ func (ticket Ticket) validate(prevTicket Ticket) error {
 	return nil
 }
 
-func (ticket Ticket) getOwnerProofSigner(prevTicketHash []byte) (string, error) {
+func (ticket TicketTx) getOwnerProofSigner(prevTicketHash []byte) (string, error) {
 	bytesProof, err := hexutil.Decode(ticket.PrevOwnerProof)
 	if err != nil {
 		return "", err
@@ -196,4 +217,56 @@ func (ticket Ticket) getOwnerProofSigner(prevTicketHash []byte) (string, error) 
 	}
 
 	return strings.ToLower(crypto.PubkeyToAddress(*signerPkey).Hex()), nil
+}
+
+func (state state) findTicketAtHeight(queryData string) (ticket, []string, error) {
+	ticketId, height, err := parseTicketQuery(queryData, state.height)
+	if err != nil {
+		return ticket{}, nil, err
+	}
+
+	lastTicketChange, err := state.tickets[ticketId].findLastChangeBeforeHeight(height)
+	if err != nil {
+		return ticket{}, nil, err
+	}
+
+	snapshot := state.history[lastTicketChange]
+	ticket := snapshot.tickets[ticketId]
+	merkleProofBytes, _, err := snapshot.tree.GetMerklePath(ticket.TicketTx)
+	if err != nil {
+		return ticket, nil, err
+	}
+
+	merkleProof := make([]string, len(merkleProofBytes))
+	for i, v := range merkleProofBytes {
+		merkleProof[i] = hexutil.Encode(v)
+	}
+	return ticket, merkleProof, nil
+}
+
+func parseTicketQuery(queryData string, currentHeight int64) (ticketId uint64, height int64, err error) {
+	params := strings.Split(queryData, ":")
+	ticketId, err = strconv.ParseUint(params[0], 10, 64)
+	if err != nil {
+		return
+	}
+
+	// Height was not provided so assume latest
+	if len(params) == 1 {
+		height = currentHeight
+		return
+	}
+
+	height, err = strconv.ParseInt(params[1], 10, 64)
+	return
+}
+
+func (ticket ticket) findLastChangeBeforeHeight(height int64) (int64, error) {
+	for i := len(ticket.ChangeHeights) - 1; i >= 0; i-- {
+		if ticket.ChangeHeights[i] <= height {
+			return ticket.ChangeHeights[i], nil
+		}
+	}
+
+	return 0, ErrTicketNotFound
 }
