@@ -14,15 +14,15 @@ import (
 )
 
 const (
-	codeTypeOK            	uint32 = 0
-	codeTypeEncodingError	uint32 = 1
-	codeTypeTicketError  	uint32 = 2
+	codeTypeOK            uint32 = 0
+	codeTypeEncodingError uint32 = 1
+	codeTypeTicketError   uint32 = 2
 )
 
 var (
-	ErrBadAddress = &ticketError{"Ticket must have an address"}
-	ErrBadNonce   = &ticketError{"Ticket nonce must increase on resale"}
-	ErrBadSignature = &ticketError{"Resale must be signed by the previous owner"}
+	ErrBadAddress     = &ticketError{"Ticket must have an address"}
+	ErrBadNonce       = &ticketError{"Ticket nonce must increase on resale"}
+	ErrBadSignature   = &ticketError{"Resale must be signed by the previous owner"}
 	ErrTicketNotFound = &ticketError{"Ticket could not be found"}
 )
 
@@ -36,35 +36,35 @@ type TicketStoreApplication struct {
 }
 
 type state struct {
-	size         int64
-	height       int64
-	rootHash     []byte
-	tickets      map[uint64]ticket
-	history      map[int64]snapshot
-	tempTreeContent  []merkletree.Content
+	size            int64
+	height          int64
+	rootHash        []byte
+	tickets         map[uint64]ticket
+	history         map[int64]snapshot
+	tempTreeContent []merkletree.Content
 }
 
 type TicketTx struct {
-	Id            	uint64  `json:"id"`
-	Nonce           uint64  `json:"nonce"`
-	Details       	string  `json:"details"`
-	OwnerAddr     	string  `json:"ownerAddr"`
-	PrevOwnerProof  string  `json:"prevOwnerProof"`
+	Id             uint64 `json:"id"`
+	Nonce          uint64 `json:"nonce"`
+	Details        string `json:"details"`
+	OwnerAddr      string `json:"ownerAddr"`
+	PrevOwnerProof string `json:"prevOwnerProof"`
 }
 
 type ticketResponse struct {
-	Ticket ticket `json:"ticket"`
+	Ticket      ticket   `json:"ticket"`
 	MerkleProof []string `json:"merkleProof"`
 }
 
 type ticket struct {
-	TicketTx `json:"ticketTx"`
+	TicketTx      `json:"ticketTx"`
 	ChangeHeights []int64 `json:"changeHeights"`
 }
 
 type snapshot struct {
 	tickets map[uint64]ticket
-	tree merkletree.MerkleTree
+	tree    merkletree.MerkleTree
 }
 
 func NewTicketStoreApplication() *TicketStoreApplication {
@@ -73,8 +73,8 @@ func NewTicketStoreApplication() *TicketStoreApplication {
 
 func (app *TicketStoreApplication) Info(req types.RequestInfo) types.ResponseInfo {
 	return types.ResponseInfo{
-		Data: fmt.Sprintf("{\"hashes\":%v,\"tickets\":%v}", app.state.height, app.state.size),
-		LastBlockHeight: app.state.height,
+		Data:             fmt.Sprintf("{\"hashes\":%v,\"tickets\":%v}", app.state.height, app.state.size),
+		LastBlockHeight:  app.state.height,
 		LastBlockAppHash: app.state.rootHash}
 }
 
@@ -85,7 +85,7 @@ func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx 
 	if err != nil {
 		return types.ResponseDeliverTx{
 			Code: codeTypeEncodingError,
-			Log: fmt.Sprint(err) }
+			Log:  fmt.Sprint(err)}
 	}
 
 	previousTicket := app.state.tickets[ticketTx.Id]
@@ -93,11 +93,11 @@ func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx 
 	if err != nil {
 		return types.ResponseDeliverTx{
 			Code: codeTypeTicketError,
-			Log: fmt.Sprint(err) }
+			Log:  fmt.Sprint(err)}
 	}
 
 	app.state.size++
-	changeHeights := append(previousTicket.ChangeHeights, app.state.height + 1)
+	changeHeights := append(previousTicket.ChangeHeights, app.state.height+1)
 	app.state.tickets[ticketTx.Id] = ticket{ticketTx, changeHeights}
 	app.state.tempTreeContent = append(app.state.tempTreeContent, ticketTx)
 	return types.ResponseDeliverTx{Code: codeTypeOK}
@@ -110,7 +110,7 @@ func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
 	if err != nil {
 		return types.ResponseCheckTx{
 			Code: codeTypeEncodingError,
-			Log: fmt.Sprint(err) }
+			Log:  fmt.Sprint(err)}
 	}
 
 	previousTicket := app.state.tickets[ticketTx.Id]
@@ -118,7 +118,7 @@ func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
 	if err != nil {
 		return types.ResponseCheckTx{
 			Code: codeTypeTicketError,
-			Log: fmt.Sprint(err) }
+			Log:  fmt.Sprint(err)}
 	}
 
 	return types.ResponseCheckTx{Code: codeTypeOK}
@@ -159,7 +159,7 @@ func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.Resp
 }
 
 func (ticket TicketTx) CalculateHash() ([]byte, error) {
-	idBytes := make([]byte,8)
+	idBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(idBytes, ticket.Id)
 	hash := sha3.SoliditySHA3(
 		[]string{"uint256", "uint256", "string", "address", "bytes"},
@@ -175,7 +175,6 @@ func (ticket TicketTx) Equals(other merkletree.Content) (bool, error) {
 
 	return false, fmt.Errorf("%v is not a ticket", other)
 }
-
 
 func (ticket TicketTx) validate(prevTicket TicketTx) error {
 	if ticket.OwnerAddr == "" {
