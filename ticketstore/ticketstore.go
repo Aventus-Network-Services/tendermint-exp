@@ -154,7 +154,7 @@ func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.Resp
 		response, _ := json.Marshal(ticketResponse{ticket, merkleProof})
 		return types.ResponseQuery{Value: response}
 	default:
-		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash or tx, got %v", reqQuery.Path)}
+		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash, tx or ticket, got %v", reqQuery.Path)}
 	}
 }
 
