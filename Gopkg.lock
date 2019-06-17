@@ -26,9 +26,10 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:b6773a8397a372d871b465232d560a76e80364bd09e2b40af5204c38d047eada"
+  digest = "1:3bb152a3b0d26e88aae92405b92b3173bed8fe473743eda60f170d033a859d63"
   name = "github.com/ethereum/go-ethereum"
   packages = [
+    "accounts/abi",
     "common",
     "common/hexutil",
     "common/math",
@@ -104,6 +105,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
+
+[[projects]]
+  digest = "1:2b8ca96ab62539a2dfb7c8a4ce42fab6ce186ad203b9a07568f4aa589a366167"
+  name = "github.com/miguelmota/go-solidity-sha3"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "7cbe696ff43a88c8774947783e2e07fd7b8b9277"
+  version = "v0.1.0"
 
 [[projects]]
   digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
@@ -248,7 +257,9 @@
   analyzer-version = 1
   input-imports = [
     "github.com/cbergoon/merkletree",
+    "github.com/ethereum/go-ethereum/common/hexutil",
     "github.com/ethereum/go-ethereum/crypto",
+    "github.com/miguelmota/go-solidity-sha3",
     "github.com/tendermint/tendermint/abci/server",
     "github.com/tendermint/tendermint/abci/types",
     "github.com/tendermint/tendermint/libs/common",
