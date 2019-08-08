@@ -4,13 +4,14 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/cbergoon/merkletree"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	sha3 "github.com/miguelmota/go-solidity-sha3"
 	"github.com/tendermint/tendermint/abci/types"
-	"strconv"
-	"strings"
 )
 
 const (
@@ -147,7 +148,7 @@ func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.Resp
 	case "tx":
 		return types.ResponseQuery{Value: []byte(fmt.Sprint(app.state.size))}
 	case "ticket":
-		ticket, merkleProof, err := app.state.findTicket(string(reqQuery.Data))
+		ticket, merkleProof, err := app.state.findTicket(reqQuery)
 		if err != nil {
 			return types.ResponseQuery{Log: fmt.Sprintf("%v is not a valid ticket id", reqQuery.Data)}
 		}
@@ -218,10 +219,15 @@ func (ticket TicketTx) getOwnerProofSigner(prevTicketHash []byte) (string, error
 	return strings.ToLower(crypto.PubkeyToAddress(*signerPkey).Hex()), nil
 }
 
-func (state state) findTicket(queryData string) (ticket, []string, error) {
-	ticketId, height, err := parseTicketQuery(queryData, state.height)
+func (state state) findTicket(query types.RequestQuery) (ticket, []string, error) {
+	ticketId, err := strconv.ParseUint(string(query.Data), 10, 64)
 	if err != nil {
 		return ticket{}, nil, err
+	}
+
+	height := query.Height
+	if height <= 0 {
+		height = state.height
 	}
 
 	lastTicketChange, err := state.tickets[ticketId].findLastChangeBeforeHeight(height)
