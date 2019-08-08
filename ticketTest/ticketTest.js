@@ -31,7 +31,7 @@ const main = async () => {
 
     const resale = {
       id: 1,
-      nonce: 2,
+      nonce: 3,
       details: "ticket",
       ownerAddr: addr2,
       prevOwnerProof

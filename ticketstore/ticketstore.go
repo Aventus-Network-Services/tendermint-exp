@@ -80,9 +80,9 @@ func (app *TicketStoreApplication) Info(req types.RequestInfo) types.ResponseInf
 		LastBlockAppHash: app.state.rootHash}
 }
 
-func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx {
+func (app *TicketStoreApplication) DeliverTx(tx types.RequestDeliverTx) types.ResponseDeliverTx {
 	var ticketTx TicketTx
-	err := json.Unmarshal(tx, &ticketTx)
+	err := json.Unmarshal(tx.Tx, &ticketTx)
 
 	if err != nil {
 		return types.ResponseDeliverTx{
@@ -105,9 +105,9 @@ func (app *TicketStoreApplication) DeliverTx(tx []byte) types.ResponseDeliverTx 
 	return types.ResponseDeliverTx{Code: codeTypeOK}
 }
 
-func (app *TicketStoreApplication) CheckTx(tx []byte) types.ResponseCheckTx {
+func (app *TicketStoreApplication) CheckTx(tx types.RequestCheckTx) types.ResponseCheckTx {
 	var ticketTx TicketTx
-	err := json.Unmarshal(tx, &ticketTx)
+	err := json.Unmarshal(tx.Tx, &ticketTx)
 
 	if err != nil {
 		return types.ResponseCheckTx{
