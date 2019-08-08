@@ -56,6 +56,7 @@ type TicketTx struct {
 type ticketResponse struct {
 	Ticket      ticket   `json:"ticket"`
 	MerkleProof []string `json:"merkleProof"`
+	Index       []int64  `json:"index"`
 }
 
 type ticket struct {
@@ -148,11 +149,11 @@ func (app *TicketStoreApplication) Query(reqQuery types.RequestQuery) types.Resp
 	case "tx":
 		return types.ResponseQuery{Value: []byte(fmt.Sprint(app.state.size))}
 	case "ticket":
-		ticket, merkleProof, err := app.state.findTicket(reqQuery)
+		ticketResponse, err := app.state.findTicket(reqQuery)
 		if err != nil {
 			return types.ResponseQuery{Log: fmt.Sprintf("%v is not a valid ticket id", reqQuery.Data)}
 		}
-		response, _ := json.Marshal(ticketResponse{ticket, merkleProof})
+		response, _ := json.Marshal(ticketResponse)
 		return types.ResponseQuery{Value: response}
 	default:
 		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash, tx or ticket, got %v", reqQuery.Path)}
@@ -219,10 +220,10 @@ func (ticket TicketTx) getOwnerProofSigner(prevTicketHash []byte) (string, error
 	return strings.ToLower(crypto.PubkeyToAddress(*signerPkey).Hex()), nil
 }
 
-func (state state) findTicket(query types.RequestQuery) (ticket, []string, error) {
+func (state state) findTicket(query types.RequestQuery) (ticketResponse, error) {
 	ticketId, err := strconv.ParseUint(string(query.Data), 10, 64)
 	if err != nil {
-		return ticket{}, nil, err
+		return ticketResponse{}, err
 	}
 
 	height := query.Height
@@ -232,21 +233,21 @@ func (state state) findTicket(query types.RequestQuery) (ticket, []string, error
 
 	lastTicketChange, err := state.tickets[ticketId].findLastChangeBeforeHeight(height)
 	if err != nil {
-		return ticket{}, nil, err
+		return ticketResponse{}, err
 	}
 
 	snapshot := state.history[lastTicketChange]
 	ticket := snapshot.tickets[ticketId]
-	merkleProofBytes, _, err := snapshot.tree.GetMerklePath(ticket.TicketTx)
+	merkleProofBytes, index, err := snapshot.tree.GetMerklePath(ticket.TicketTx)
 	if err != nil {
-		return ticket, nil, err
+		return ticketResponse{}, err
 	}
 
 	merkleProof := make([]string, len(merkleProofBytes))
 	for i, v := range merkleProofBytes {
 		merkleProof[i] = hexutil.Encode(v)
 	}
-	return ticket, merkleProof, nil
+	return ticketResponse{Ticket: ticket, Index: index, MerkleProof: merkleProof}, nil
 }
 
 func parseTicketQuery(queryData string, currentHeight int64) (ticketId uint64, height int64, err error) {
