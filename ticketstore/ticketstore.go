@@ -206,6 +206,11 @@ func (ticket TicketTx) validate(prevTicket TicketTx) error {
 }
 
 func (ticket TicketTx) getOwnerProofSigner(prevTicketHash []byte) (string, error) {
+	if len(ticket.PrevOwnerProof) < 3 {
+		// Cannot be a valid proof
+		return "", ErrBadSignature
+	}
+
 	bytesProof, err := hexutil.Decode(ticket.PrevOwnerProof)
 	if err != nil {
 		return "", err
